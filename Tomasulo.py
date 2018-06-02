@@ -77,6 +77,17 @@ class executer:
 
 	def execute(instruction):
 		self.instruction = instruction
+		if instruction[0] == "ADD" or \
+			instruction[0] == "ADDI" or \
+			instruction[0] == "SUB" or \
+			instruction[0] == "MUL" or \
+			instruction[0] == "DIV" or \
+			instruction[0] == "LW" or \
+			instruction[0] == "SW":
+
+			instruction[3] = "mark"
+			for i in range(len(self.list_data_bus)):
+				self.list_data_bus[i].send(instruction)
 
 	def clock(self):
 		if len(self.instruction) > 0:
@@ -142,8 +153,8 @@ class register:
 		return self.Vi
 
 	def push(info):
-		if info and info[1] == self.name:
-			if info[3] = "mark":
+		if info and (info[1] == self.name):
+			if info[3] == "mark":
 				issue(info[0])
 			else:
 				store(float(info[3]))
@@ -206,8 +217,7 @@ if __name__ == "__main__":
 		print(add_sub.name, add_sub.top())
 
 		next_clock = input()
-
-
+		
 
 	# while not instructions_unity.empty():
 	# 	print("instructions_unity:", instructions_unity.pop())
