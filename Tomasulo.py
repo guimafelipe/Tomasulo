@@ -1,10 +1,5 @@
-import sys
 import queue
 	
-class register:
-	def __init__(self):
-		self.Qi = 0
-
 
 class data_bus:
 	def __init__(self, name):
@@ -16,10 +11,20 @@ class data_bus:
 			self.receivers.append(list[i])
 
 	def send(self, info):
-		# print("len:", len(self.receivers), "info:", info)
+		# print(self.name, "len:", len(self.receivers), "info:", info)
 		for i in range(len(self.receivers)):
-			# print("info:", info, "receiver:")
-			self.receivers[i].push(info)
+			# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
+			# self.receivers[i].push(info)
+			if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
+				or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
+				or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
+				or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
+				or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
+				or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
+				or (self.receivers[i].name == "load_store" and info and info[0] == "SW"):
+				self.receivers[i].push(info)
+				# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
+				# print("GOKU")
 
 
 class station:
@@ -50,33 +55,61 @@ class station:
 		return self.queue.empty()
 
 	def full(self):
-		return self.size == self.max_size
+		return self.size >= self.max_size
 
 	def clock(self):
 		if not self.empty():
 			for i in range(len(self.list_data_bus)):
-				print(self.name, self.list_data_bus[i].name, "info:", self.top())
-				self.list_data_bus[i].send(self.pop())
+				# print(self.name, self.list_data_bus[i].name, "info:", self.top())
+				self.list_data_bus[i].send(self.top())
+			self.pop()
 
 	def add_data_bus(self, data_bus):
 		self.list_data_bus.append(data_bus)
 
+class executer:
+	def __init__(self, cycles, list_data_bus):
+		self.max_cycles = cyles
+		self.cycles = cycles
+		self.instruction = []
+		self.val = 0
+		self.list_data_bus = list_data_bus
 
-class reservation_station(station):
-	def __init__(self, name, max_size, List_data_bus, Cycles):
-		super().__init__(name, max_size, List_data_bus)
-		self.max_cycles = Cycles
-		self.cycles = Cycles
+	def execute(instruction):
+		self.instruction = instruction
 
 	def clock(self):
-		self.cycles -= 1
+		if len(self.instruction) > 0:
+			self.cycles -= 1
+
+		if self.cycles == 0:
+			self.cycles == max_cycles
+
+			for i in range(len(self.list_data_bus)):
+				self.instruction[3] = str(val)
+				self.list_data_bus[i].send(self.instruction)
+			
+			self.instruction = []
+
+
+class reservation_station(station):
+	def __init__(self, name, max_size, List_data_bus, cycles):
+		super().__init__(name, max_size, List_data_bus)
+		self.max_cycles = cycles
+		self.cycles = cycles
+
+	def clock(self):
+		if not self.empty():
+			self.cycles -= 1
 
 		if self.cycles == 0:
 			self.cycles = self.max_cycles
 			if not self.empty():
 				for i in range(len(self.list_data_bus)):
-					print(self.name, self.list_data_bus[i].name, "info:", self.top())
-					self.list_data_bus[i].send(self.pop())
+					# print(self.name, self.list_data_bus[i].name, "info:", self.top())
+					self.list_data_bus[i].send(self.top())
+				self.pop()
+
 
 class instructions_unity(station):
 	def __init__(self, name, max_size, Data_bus):
@@ -88,17 +121,49 @@ class instructions_unity(station):
 		self.size += 1
 
 
+# class reorder_buffer(station):
+# 	def __init__(self, name, max_size, List_data_bus):
+# 		self.Qi = 0
+
+class register:
+	def __init__(self, name):
+		self.name = name
+		self.Vi = 0
+		self.Qi = ""
+
+	def issue(self, station):
+		self.Qi = station
+
+	def store(self, val):
+		self.Vi = val
+		self.Qi = ""
+
+	def load(self):
+		return self.Vi
+
+	def push(info):
+		if info and info[1] == self.name:
+			if info[3] = "mark":
+				issue(info[0])
+			else:
+				store(float(info[3]))
+
+
 if __name__ == "__main__":
 	instructions = [
-					["LD", "F1", "34(R2)"],
-					["LD", "F2", "45(R3)"],
+					["LW", "F1", "34(R2)"],
+					["LW", "F2", "45(R3)"],
 					["MUL", "F0", "F2", "F4"],
 					["SUB", "F5", "F1", "F2"],
 					["DIV", "F0", "F3", "F1"],
 					["ADD", "F1", "F5", "F2"],
 				   ]
 
-	instructions_unity = instructions_unity("instructions_unity", 10, [data_bus("load_store_bus")])
+
+	registers = []
+	for i in range(32):
+		registers.append(register("R" + str(i)))
+
 
 	commom_data_bus = data_bus("common_data_bus")
 
@@ -109,7 +174,21 @@ if __name__ == "__main__":
 
 	commom_data_bus.add_receivers([load_store, mult, div, add_sub])
 
+	
+	load_store_bus = data_bus("load_store_bus")
+	load_store_bus.add_receivers([load_store])
+
+	operations_bus = data_bus("operations_bus")
+	operations_bus.add_receivers([mult, div, add_sub])
+
+	instructions_unity = instructions_unity("instructions_unity", 10, [load_store_bus, operations_bus])
+
+
+	clock = 0
 	while len(instructions) > 0:
+		print("CLOCK:", clock)
+		clock += 1
+
 		if not instructions_unity.full():
 			instructions_unity.push(instructions.pop(0))
 
@@ -120,11 +199,13 @@ if __name__ == "__main__":
 		add_sub.clock()
 
 
-		# print("instructions_unity:", instructions_unity.top())
-		# print("load_store:", load_store.top())
-		# print("mult:", mult.top())
-		# print("div:", div.top())
-		# print("add_sub:", add_sub.top())
+		print(instructions_unity.name, instructions_unity.top())
+		print(load_store.name, load_store.top())
+		print(mult.name, mult.top())
+		print(div.name, div.top())
+		print(add_sub.name, add_sub.top())
+
+		next_clock = input()
 
 
 
