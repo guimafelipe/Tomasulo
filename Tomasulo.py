@@ -1,6 +1,30 @@
 import sys
 import queue
-	
+
+
+
+class recently_used_memory:
+	def __init__(self):
+		self.list = []
+
+	def push(self, item):
+		if len(self.list) == 4:
+			self.list.pop(0)
+		self.list.append(item)
+
+	def print(self):
+		for item in self.list:
+			print("adress:", item[0], "val:", item[1])
+
+
+# Global variables
+memory = []
+clocks = 0	
+PC = 0
+concluded_instructions = 0
+recently_used_memory
+
+
 
 class data_bus:
 	def __init__(self, name):
@@ -24,7 +48,7 @@ class data_bus:
 				or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
 				or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
 				or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
-				or (self.receivers[i].name[0].isdigit()):
+				or (self.receivers[i].name == "register_bank"):
 				self.receivers[i].push(info)
 				# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
 				# print("GOKU")
@@ -54,23 +78,21 @@ class executer:
 			instruction[0] == "LW" or \
 			instruction[0] == "SW":
 
-			instruction[3] = "mark"
+			instruction.append("mark")
 			for i in range(len(self.list_data_bus)):
 				self.list_data_bus[i].send(instruction)
 
 	def busy(self):
-		return len(self.instruction ) == 0
+		return len(self.instruction) > 0
 
 	def get_result(self):
 		return 0
 
 	def mark_destiny(self):
-		if len(self.instruction) < 4: return
-		temp = self.instruction[3]
-		self.instruction[3] = "mark"
+		self.instruction.append("mark")
 		for i in range(len(self.list_data_bus)):
 			self.list_data_bus[i].send(self.instruction)
-		self.instruction[3] = temp
+		self.instruction.pop()
 
 	def clock(self):
 		if len(self.instruction) > 0:
@@ -79,9 +101,59 @@ class executer:
 			if self.cycles == 0:
 				for i in range(len(self.list_data_bus)):
 					self.instruction[3] = str(self.	get_result())
+					print("ASDKHFLADSJFISDAVNÇSK", self.instruction)
 					self.list_data_bus[i].send(self.instruction)
 				
-				self.instruction = []
+				self.instruction.clear()
+
+				global concluded_instructions
+				concluded_instructions += 1
+
+
+class loader(executer):
+	def __init__(self, list_data_bus):
+		super().__init__(list_data_bus)
+
+	def get_result(self, register_bank):
+		if self.instruction[0] == "LW":
+			address = int(self.instruction[2]) + register_bank.registers[int(self.instruction[3])].Vi
+			recently_used_memory.push([address, memory[address]])
+			print("address", address, "memory:", memory[address])
+			return memory[address]
+		elif self.instruction[0] == "SW":
+			address = int(self.instruction[2]) + register_bank.registers[int(self.instruction[3])].Vi
+			memory[address] = register_bank.registers[int(self.instruction[1])].Vi
+			recently_used_memory.push([address, memory[address]])
+			print("address", address, "memory:", memory[address])
+
+	def execute(self, instruction):
+		if not instruction: return
+
+		if instruction[0] != "SW" and instruction[0] != "LW":
+			return
+
+		self.instruction = instruction
+		self.cycles = 4
+
+		self.mark_destiny()
+
+	def clock(self, register_bank):
+		if len(self.instruction) > 0:
+			self.cycles -= 1
+
+			if self.cycles == 0:
+				if self.instruction[0] == "LW":
+					for i in range(len(self.list_data_bus)):
+						self.instruction[3] = str(self.	get_result(register_bank))
+						print("ASDKHFLADSJFISDAVNÇSK", self.instruction)
+						self.list_data_bus[i].send(self.instruction)
+				elif self.instruction[0] == "SW":
+					self.get_result(register_bank)
+
+				self.instruction.clear()
+
+				global concluded_instructions
+				concluded_instructions += 1
 
 
 class adder(executer):
@@ -123,7 +195,7 @@ class multiplier(executer):
 		self.mark_destiny()
 
 
-class station:
+class buffer:
 	def __init__(self, name, max_size, list_data_bus):
 		self.Qj = 0
 		self.Qk = 0
@@ -164,41 +236,36 @@ class station:
 		self.list_data_bus.append(data_bus)
 
 
-class reservation_station(station):
+class reservation_station(buffer):
 	def __init__(self, name, max_size, list_data_bus, executer):
 		super().__init__(name, max_size, list_data_bus)
 		self.executer = executer
-		self.max_cycles = executer.cycles
-		self.cycles = executer.cycles
 
 	def clock(self):
-		if not self.empty():
-			self.executer.execute(self.top())
-		self.executer.clock()
-		if not self.empty():
-			self.cycles -= 1
-
-		if self.cycles == 0:
-			self.cycles = self.max_cycles
-			if not self.empty():
-				if not self.executer.busy():
-					self.executer.execute(self.top())
-				self.executer.clock()
-				# for i in range(len(self.list_data_bus)):
-					# print(self.name, self.list_data_bus[i].name, "info:", self.top())
-					# self.list_data_bus[i].send(self.top())
-				self.pop()
+		if not self.executer.busy():
+			self.executer.execute(self.pop())
+		else:
+			self.executer.clock()
+			# for i in range(len(self.list_data_bus)):
+				# print(self.name, self.list_data_bus[i].name, "info:", self.top())
+				# self.list_data_bus[i].send(self.top())
 
 
-class instructions_unity(station):
+class instructions_unity(buffer):
 	def __init__(self, name, max_size, list_data_bus):
 		super().__init__(name, max_size, list_data_bus)
 		self.max_size = max_size
 
+class load_store(buffer):
+	def __init__(self, name, max_size, list_data_bus, executer):
+		super().__init__(name, max_size, list_data_bus)
+		self.executer = executer
 
-# class reorder_buffer(station):
-# 	def __init__(self, name, max_size, List_data_bus):
-# 		self.Qi = 0
+	def clock(self, register_bank):
+		if not self.executer.busy():
+			self.executer.execute(self.pop())
+		else:
+			self.executer.clock(register_bank)
 
 
 class register:
@@ -207,34 +274,47 @@ class register:
 		self.Vi = 0
 		self.Qi = ""
 
-	def issue(self, station):
-		# print("asçdfknoi asdfnASDLNFODSIANFASNDFADSFINÇ - issue")
-		self.Qi = station
 
-	def store(self, val):
-		# print("asçdfknoi asdfnASDLNFODSIANFASNDFADSFINÇ - store")
-		self.Vi = val
-		self.Qi = ""
+class register_bank:
+	def __init__(self, name):
+		self.name = name
+		self.registers = []	
+		for i in range(32):
+			self.registers.append(register(str(i)))
 
-	def load(self):
-		return self.Vi
+	def print(self):
+		for register in self.registers:
+			print(register.name, " - Vi:", register.Vi, " - Qi:", register.Qi)
 
 	def push(self, info):
-		# print("asçdfknoi asdfnASDLNFODSIANFASNDFADSFINÇ - pushing")
-		if info and (str(info[1]) == self.name):
-			# print(info, self.name, info[1])
-			# print("asçdfknoi asdfnASDLNFODSIANFASNDFADSFINÇ - pushing")
-			if info[3] == "mark":
-				self.issue(info[0])
+		# print(info)
+		if info[-1] == "mark":
+			if info[0] == "SW":
+				return
+				# memory[int(info[2]) + int(info[3])] = info[0]
 			else:
-				self.store(float(info[3]))
+				if int(info[1]) != 0:
+					self.registers[int(info[1])].Qi = info[0]
+		elif info[0] == "SW":
+			return
+			# if int(info[2]) + int(info[3]) != 0:
+			# 	self.registers[int(info[2]) + int(info[3])].Vi = self.registers[int(info[1])].Vi
+			# 	self.registers[int(info[2]) + int(info[3])].Qi = ""
+		# elif info[0] == "LW":
+		# 	if int(info[1]) != 0:
+		# 		self.registers[int(info[1])].Vi = self.registers[int(info[2]) + int(info[3])].Vi
+		# 		self.registers[int(info[1])].Qi = ""
+		else:
+			if info[1] != 0:
+				self.registers[int(info[1])].Vi = float(info[3])
+				self.registers[int(info[1])].Qi = ""
 
 
 def bin_to_int(b):
 	ans = 0
 	for i in range(len(b)-1, -1, -1):
 		ans += int(b[i]) * 2**(len(b) - 1 - i)
-	return ans
+	return str(ans)
 
 
 def read(Dict, instruction):
@@ -256,10 +336,6 @@ def read(Dict, instruction):
 	return ans
 
 
-def print_registers(list):
-	for register in list:
-		print(register.name, " - Vi:", register.Vi, " - Qi:", register.Qi)
-
 if __name__ == "__main__":
 	Dict = {
 		"000000": "R",
@@ -274,16 +350,7 @@ if __name__ == "__main__":
 		"000010": "JMP",
 		"100011": "LW",
 		"101011": "SW"
-	}
-
-	# instructions = [
-	# 				["LW", "F1", "34(R2)"],
-	# 				["LW", "F2", "45(R3)"],
-	# 				["MUL", "F0", "F2", "F4"],
-	# 				["SUB", "F5", "F1", "F2"],
-	# 				["DIV", "F0", "F3", "F1"],
-	# 				["ADD", "F1", "F5", "F2"],
-	# 			   ]
+	}	
 	
 	instructions = []
 
@@ -297,16 +364,14 @@ if __name__ == "__main__":
 			print(instructions[-1])
 
 
-	registers = []
-	for i in range(32):
-		registers.append(register(str(i)))
+	register_bank = register_bank("register_bank")
 
 
 	commom_data_bus = data_bus("common_data_bus")
-	commom_data_bus.add_receivers(registers)
+	commom_data_bus.add_receivers([register_bank])
 
-
-	load_store = reservation_station("load_store", 8, [commom_data_bus], executer([commom_data_bus]))
+	loader = loader([commom_data_bus])
+	load_store = load_store("load_store", 8, [commom_data_bus], loader)
 
 	multiplier = multiplier([commom_data_bus])
 	mult = reservation_station("mult", 3, [commom_data_bus], multiplier)
@@ -325,17 +390,29 @@ if __name__ == "__main__":
 
 	instructions_unity = instructions_unity("instructions_unity", 10, [load_store_bus, operations_bus])
 
+	memory = [0] * 4000
+	clocks = 0
+	PC = 0
+	concluded_instructions = 0
+	recently_used_memory = recently_used_memory()
+	# while len(instructions) > 0:
+	while True:
+		print("RUM:")
+		recently_used_memory.print()
+		print()
+		print("CLOCKS:", clocks)
+		PC += 4
+		print("PC:", PC)
+		print("# of concluded instructions:", concluded_instructions)
+		if concluded_instructions != 0:
+			print("CPI:", round(clocks/concluded_instructions, 3))
+		clocks += 1
 
-	clock = 0
-	while len(instructions) > 0:
-		print("CLOCK:", clock)
-		clock += 1
-
-		if not instructions_unity.full():
+		if (not instructions_unity.full()) and (len(instructions) > 0):
 			instructions_unity.push(instructions.pop(0))
 
 		instructions_unity.clock()
-		load_store.clock()
+		load_store.clock(register_bank)
 		mult.clock()
 		div.clock()
 		add_sub.clock()
@@ -346,7 +423,7 @@ if __name__ == "__main__":
 		print(mult.name, mult.top())
 		print(div.name, div.top())
 		print(add_sub.name, add_sub.top())
-		print_registers(registers)
+		register_bank.print()
 
 		press_enter = input()
 
@@ -363,4 +440,4 @@ if __name__ == "__main__":
 	# 	print("add_sub:", add_sub.pop())
 
 
-	# Fazer o execute de cada instrução
+	# Fazer o if len(.Qi) == 0: val = .Vi
