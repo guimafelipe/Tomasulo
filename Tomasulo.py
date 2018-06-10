@@ -29,44 +29,55 @@ class data_bus:
 	def __init__(self, name):
 		self.receivers = []
 		self.name = name
+		self.queue = []
+
+	def print(self):
+		print(self.queue)
 
 	def add_receivers(self, list):
 		for i in range(len(list)):
 			self.receivers.append(list[i])
 
 	def send(self, info):
-		# print(self.name, "len:", len(self.receivers), "sending info:")
-		for i in range(len(self.receivers)):
-			# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
-			# self.receivers[i].push(info)
-			# print("trying to send info to:", self.receivers[i].name)
-			# if info[0] == "done":
-				# print()
-				# print("WE ARE THE FUTURE")
-				# print()
-			if info[0] != "done":
-			# if True:
-				if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
-					or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
-					or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
-					or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
-					or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
-					or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
-					or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
-					or (self.receivers[i].name == "register_bank"):
-					self.receivers[i].push(info)
-			elif self.receivers[i].name == "register_bank":
-				self.receivers[i].push(info)
-			elif isinstance(self.receivers[i], buffer) and (self.receivers[i].Qj == info[1] or self.receivers[i].Qk == info[1]):
-				print("ksjdfnsjdafnKJDNSLFNSJKDNFJSDNAÇFJKNDJAFSNJASNDFNALKSDNFSD")
-				if self.receivers[i].Qj == info[1]:
-					self.receivers[i].Qj.clear()
-					self.receivers[i].Vj = info[3]
-				if self.receivers[i].Qk == info[1]:
-					self.receivers[i].Qk.clear()
-					self.receivers[i].Vk = info[3]
+		if len(info) == 4: info.append("")
+		# print("INFO:", info, self.name)
+		self.queue.append(info)
+		# print("new QUEUE:", self.queue, self.name)
+
+	def clock(self):
+		# print("QUEUE:", self.queue, self.name)
+		for i in range(len(self.queue)):
+			info = self.queue[i]
+
+			if not info: continue
+			# print(self.name, "len:", len(self.receivers), "sending info:")
+			for i in range(len(self.receivers)):
 				# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
-				# print("GOKU")
+				# self.receivers[i].push(info)
+				if info[0] != "done":
+				# if True:
+					if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
+						or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
+						or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
+						or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
+						or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
+						or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
+						or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
+						or (self.receivers[i].name == "register_bank"):
+						self.receivers[i].push(info)
+				elif self.receivers[i].name == "register_bank":
+					self.receivers[i].push(info)
+				elif isinstance(self.receivers[i], buffer) and (self.receivers[i].Qj == info[1] or self.receivers[i].Qk == info[1]):
+					print("ksjdfnsjdafnKJDNSLFNSJKDNFJSDNAÇFJKNDJAFSNJASNDFNALKSDNFSD")
+					if self.receivers[i].Qj == info[1]:
+						self.receivers[i].Qj.clear()
+						self.receivers[i].Vj = info[3]
+					if self.receivers[i].Qk == info[1]:
+						self.receivers[i].Qk.clear()
+						self.receivers[i].Vk = info[3]
+					# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
+					# print("GOKU")
+		self.queue.clear()
 
 
 class executer:
@@ -93,7 +104,7 @@ class executer:
 			instruction[0] == "LW" or \
 			instruction[0] == "SW":
 
-			instruction.append("mark")
+			instruction[-1] = "mark"
 			for i in range(len(self.list_data_bus)):
 				self.list_data_bus[i].send(instruction)
 
@@ -104,22 +115,34 @@ class executer:
 		return 0
 
 	def mark_destiny(self):
-		self.instruction.append("mark")
+		if not self.instruction: return
+
+		instruction = []
+		for el in self.instruction:
+			instruction.append(el)
+
+		instruction[-1] = "mark"
 		for i in range(len(self.list_data_bus)):
-			self.list_data_bus[i].send(self.instruction)
-		self.instruction.pop()
+			# print("INSTRUCTION:", instruction, self.list_data_bus[i].name)
+			self.list_data_bus[i].send(instruction)
+		instruction.pop()
 
 	def clock(self):
 		if len(self.instruction) > 0:
+			instruction = []
+			for el in self.instruction:
+				instruction.append(el)
+
 			if self.cycles > 0:
 				self.cycles -= 1
 
 			if self.cycles == 0:
 				for i in range(len(self.list_data_bus)):
-					self.instruction[3] = str(self.	get_result())
-					self.instruction[0] = "done"
-					print("EXECUTING", self.instruction)
-					self.list_data_bus[i].send(self.instruction)
+					# print("BEFORE:", instruction)
+					instruction[3] = str(self.	get_result())
+					instruction[0] = "done"
+					# print("EXECUTING", instruction)
+					self.list_data_bus[i].send(instruction)
 				
 				self.instruction.clear()
 
@@ -135,13 +158,13 @@ class loader(executer):
 		if self.instruction[0] == "LW":
 			address = int(self.instruction[2]) + register_bank.registers[int(self.instruction[3])].Vi
 			recently_used_memory.push([address, memory[address]])
-			print("address", address, "memory:", memory[address])
+			# print("address", address, "memory:", memory[address])
 			return memory[address]
 		elif self.instruction[0] == "SW":
-			address = int(self.instruction[2]) + register_bank.registers[int(self.instruction[3])].Vi
+			address = int(self.instruction[2]) + int(register_bank.registers[int(self.instruction[3])].Vi)
 			memory[address] = register_bank.registers[int(self.instruction[1])].Vi
 			recently_used_memory.push([address, memory[address]])
-			print("address", address, "memory:", memory[address])
+			# print("address", address, "memory:", memory[address])
 
 	def execute(self, instruction):
 		if not instruction: return
@@ -156,17 +179,22 @@ class loader(executer):
 
 	def clock(self, register_bank):
 		if len(self.instruction) > 0:
+
 			if self.cycles > 0:
 				self.cycles -= 1
 
 			if self.cycles == 0:
-				if self.instruction[0] == "LW":
+				instruction = []
+				for el in self.instruction:
+					instruction.append(el)
+
+				if instruction[0] == "LW":
 					for i in range(len(self.list_data_bus)):
-						self.instruction[3] = str(self.	get_result(register_bank))
-						self.instruction[0] = "done"
-						print("EXECUTING", self.instruction)
-						self.list_data_bus[i].send(self.instruction)
-				elif self.instruction[0] == "SW":
+						instruction[3] = str(self.get_result(register_bank))
+						instruction[0] = "done"
+						# print("EXECUTING", instruction)
+						self.list_data_bus[i].send(instruction)
+				elif instruction[0] == "SW":
 					self.get_result(register_bank)
 
 				self.instruction.clear()
@@ -191,6 +219,7 @@ class adder(executer):
 		self.instruction = instruction
 		self.cycles = 1
 
+		# print("marking my DESTINY:", self.instruction)
 		self.mark_destiny()
 
 
@@ -266,6 +295,7 @@ class reservation_station(buffer):
 
 	def clock(self):
 		if not self.executer.busy():
+			# print("TRYING TO EXECUTE:", self.top())
 			self.executer.execute(self.pop())
 		self.executer.clock()
 			# for i in range(len(self.list_data_bus)):
@@ -315,7 +345,7 @@ class register_bank:
 			print(register.name, " - Vi:", register.Vi, " - Qi:", register.Qi)
 
 	def push(self, info):
-		# print(info)
+		# print("IN THE REGISTER_BANK:", info)
 		if info[-1] == "mark":
 			if info[0] == "SW":
 				return
@@ -345,7 +375,7 @@ def bin_to_int(b):
 	return str(ans)
 
 
-def read(Dict, instruction):
+def read_binary(Dict, instruction):
 	# 00100000000010100000000001100100
 	# ; I1: addi R10,R0,100
 	ans = []
@@ -354,12 +384,40 @@ def read(Dict, instruction):
 		ans.append(bin_to_int(instruction[16:21]))
 		ans.append(bin_to_int(instruction[6:11]))
 		ans.append(bin_to_int(instruction[11:16]))
+		ans.append("")
 
 	else:
 		ans.append(Dict[instruction[:6]])
 		ans.append(bin_to_int(instruction[11:16]))
 		ans.append(bin_to_int(instruction[6:11]))
 		ans.append(bin_to_int(instruction[16:32]))
+		ans.append("")
+
+	return ans
+
+
+def read_assembly(Dict, instruction):
+	ans = []
+	instruction = instruction[:-1]
+
+	if instruction[0] == 'P':
+		ans.append(instruction[:-1])
+		return ans
+
+	I_R = instruction.split(" ")
+	ans.append(I_R[0])
+	R = I_R[1].split(",")
+	ans.append(R[0][1:])
+
+	if ans[0] == "LW" or ans[0] == "SW":
+		R = R[-1].split("(")
+		ans.append(R[0])
+		ans.append(R[1][1:-1])
+	else:
+		ans.append(R[1][1:])
+		if R[2][0] == 'R' or R[2][0] == 'P':
+			R[2] = R[2][1:]
+		ans.append(R[2])
 
 	return ans
 
@@ -382,17 +440,20 @@ if __name__ == "__main__":
 	
 	instructions = []
 
-	with open('input.txt') as file_in:
+	with open('benchmark.txt') as file_in:
+	# with open('input.txt') as file_in:
 		for line in file_in:
 			if line[0] == '\n':
 				print()
 				break
 			if line[0] == ';': continue
-			instructions.append(read(Dict, line))
+			# instructions.append(read_binary(Dict, line))
+			instructions.append(read_assembly(Dict, line))
 			print(instructions[-1])
 
 
 	register_bank = register_bank("register_bank")
+	register_bank.push(["ADDI", "1", "0", "3"])
 
 
 	commom_data_bus = data_bus("common_data_bus")
@@ -408,7 +469,7 @@ if __name__ == "__main__":
 	adder = adder([commom_data_bus])
 	add_sub = reservation_station("add_sub", 3, [commom_data_bus], adder)
 
-	# commom_data_bsu.add_receivers([load_store, mult, div, add_sub])	
+	# commom_data_bus.add_receivers([load_store, mult, div, add_sub])	
 
 	load_store_bus = data_bus("load_store_bus")
 	load_store_bus.add_receivers([load_store])
@@ -442,8 +503,16 @@ if __name__ == "__main__":
 		instructions_unity.clock()
 		load_store.clock(register_bank)
 		mult.clock()
-		div.clock()
+		# div.clock()
 		add_sub.clock()
+		# print("LIST_DATA_BUS", add_sub.list_data_bus)
+		# for i in range(len(add_sub.list_data_bus)):
+		# 	print("DATA_BUS")
+		# 	add_sub.list_data_bus[i].print()
+		commom_data_bus.print()
+		commom_data_bus.clock()
+		load_store_bus.clock()
+		operations_bus.clock()
 
 
 		# print(instructions_unity.name, instructions_unity.top())
