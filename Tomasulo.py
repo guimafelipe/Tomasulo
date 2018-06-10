@@ -25,7 +25,6 @@ concluded_instructions = 0
 recently_used_memory
 
 
-
 class data_bus:
 	def __init__(self, name):
 		self.receivers = []
@@ -41,15 +40,31 @@ class data_bus:
 			# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
 			# self.receivers[i].push(info)
 			# print("trying to send info to:", self.receivers[i].name)
-			if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
-				or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
-				or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
-				or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
-				or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
-				or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
-				or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
-				or (self.receivers[i].name == "register_bank"):
+			# if info[0] == "done":
+				# print()
+				# print("WE ARE THE FUTURE")
+				# print()
+			if info[0] != "done":
+			# if True:
+				if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
+					or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
+					or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
+					or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
+					or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
+					or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
+					or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
+					or (self.receivers[i].name == "register_bank"):
+					self.receivers[i].push(info)
+			elif self.receivers[i].name == "register_bank":
 				self.receivers[i].push(info)
+			elif isinstance(self.receivers[i], buffer) and (self.receivers[i].Qj == info[1] or self.receivers[i].Qk == info[1]):
+				print("ksjdfnsjdafnKJDNSLFNSJKDNFJSDNAÇFJKNDJAFSNJASNDFNALKSDNFSD")
+				if self.receivers[i].Qj == info[1]:
+					self.receivers[i].Qj.clear()
+					self.receivers[i].Vj = info[3]
+				if self.receivers[i].Qk == info[1]:
+					self.receivers[i].Qk.clear()
+					self.receivers[i].Vk = info[3]
 				# print(self.name, "info:", info, "receiver:", self.receivers[i].name)
 				# print("GOKU")
 
@@ -96,12 +111,14 @@ class executer:
 
 	def clock(self):
 		if len(self.instruction) > 0:
-			self.cycles -= 1
+			if self.cycles > 0:
+				self.cycles -= 1
 
 			if self.cycles == 0:
 				for i in range(len(self.list_data_bus)):
 					self.instruction[3] = str(self.	get_result())
-					print("ASDKHFLADSJFISDAVNÇSK", self.instruction)
+					self.instruction[0] = "done"
+					print("EXECUTING", self.instruction)
 					self.list_data_bus[i].send(self.instruction)
 				
 				self.instruction.clear()
@@ -139,13 +156,15 @@ class loader(executer):
 
 	def clock(self, register_bank):
 		if len(self.instruction) > 0:
-			self.cycles -= 1
+			if self.cycles > 0:
+				self.cycles -= 1
 
 			if self.cycles == 0:
 				if self.instruction[0] == "LW":
 					for i in range(len(self.list_data_bus)):
 						self.instruction[3] = str(self.	get_result(register_bank))
-						print("ASDKHFLADSJFISDAVNÇSK", self.instruction)
+						self.instruction[0] = "done"
+						print("EXECUTING", self.instruction)
 						self.list_data_bus[i].send(self.instruction)
 				elif self.instruction[0] == "SW":
 					self.get_result(register_bank)
@@ -197,43 +216,47 @@ class multiplier(executer):
 
 class buffer:
 	def __init__(self, name, max_size, list_data_bus):
-		self.Qj = 0
-		self.Qk = 0
-		self.queue = queue.Queue()
+		self.list = [0] * max_size
+		self.Qj = [0] * max_size
+		self.Qk = [0] * max_size
+		self.Vj = [0] * max_size
+		self.Vk = [0] * max_size
 		self.name = name
+		self.start = 0
+		self.end = 0
 		self.size = 0
 		self.max_size = max_size
 		self.list_data_bus = list_data_bus
 
 	def push(self, obj):
-		self.queue.put(obj)
-		self.size += 1
+		if self.size < self.max_size:
+			self.list[self.end] = obj
+			self.end = (self.end + 1) % self.max_size
+			self.size += 1
 
 	def pop(self):
-		if not self.queue.empty():
+		if self.size > 0:
+			ans = self.list[self.start]
+			self.start = (self.start + 1) % self.max_size
 			self.size -= 1
-			return self.queue.get()
+			return ans
 
 	def top(self):
-		top = self.pop()
-		self.push(top)
-		return top
+		if self.size > 0:
+			return self.list[self.end - 1]
 
 	def empty(self):
-		return self.queue.empty()
+		return self.size == 0
 
 	def full(self):
 		return self.size >= self.max_size
 
-	def clock(self):
-		if not self.empty():
-			for i in range(len(self.list_data_bus)):
-				# print(self.name, self.list_data_bus[i].name, "info:", self.top())
-				self.list_data_bus[i].send(self.top())
-			self.pop()
-
 	def add_data_bus(self, data_bus):
 		self.list_data_bus.append(data_bus)
+
+	def print(self):
+		for i in range(self.max_size):
+			print(self.name, self.list[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i])
 
 
 class reservation_station(buffer):
@@ -244,8 +267,7 @@ class reservation_station(buffer):
 	def clock(self):
 		if not self.executer.busy():
 			self.executer.execute(self.pop())
-		else:
-			self.executer.clock()
+		self.executer.clock()
 			# for i in range(len(self.list_data_bus)):
 				# print(self.name, self.list_data_bus[i].name, "info:", self.top())
 				# self.list_data_bus[i].send(self.top())
@@ -256,6 +278,13 @@ class instructions_unity(buffer):
 		super().__init__(name, max_size, list_data_bus)
 		self.max_size = max_size
 
+	def clock(self):
+		if not self.empty():
+			for i in range(len(self.list_data_bus)):
+				# print(self.name, self.list_data_bus[i].name, "info:", self.top())
+				self.list_data_bus[i].send(self.top())
+			self.pop()
+
 class load_store(buffer):
 	def __init__(self, name, max_size, list_data_bus, executer):
 		super().__init__(name, max_size, list_data_bus)
@@ -264,8 +293,7 @@ class load_store(buffer):
 	def clock(self, register_bank):
 		if not self.executer.busy():
 			self.executer.execute(self.pop())
-		else:
-			self.executer.clock(register_bank)
+		self.executer.clock(register_bank)
 
 
 class register:
@@ -371,7 +399,7 @@ if __name__ == "__main__":
 	commom_data_bus.add_receivers([register_bank])
 
 	loader = loader([commom_data_bus])
-	load_store = load_store("load_store", 8, [commom_data_bus], loader)
+	load_store = load_store("load_store", 5, [commom_data_bus], loader)
 
 	multiplier = multiplier([commom_data_bus])
 	mult = reservation_station("mult", 3, [commom_data_bus], multiplier)
@@ -380,7 +408,7 @@ if __name__ == "__main__":
 	adder = adder([commom_data_bus])
 	add_sub = reservation_station("add_sub", 3, [commom_data_bus], adder)
 
-	commom_data_bus.add_receivers([load_store, mult, div, add_sub])	
+	# commom_data_bsu.add_receivers([load_store, mult, div, add_sub])	
 
 	load_store_bus = data_bus("load_store_bus")
 	load_store_bus.add_receivers([load_store])
@@ -388,7 +416,7 @@ if __name__ == "__main__":
 	operations_bus = data_bus("operations_bus")
 	operations_bus.add_receivers([mult, div, add_sub])
 
-	instructions_unity = instructions_unity("instructions_unity", 10, [load_store_bus, operations_bus])
+	instructions_unity = instructions_unity("instructions_unity", 6, [load_store_bus, operations_bus])
 
 	memory = [0] * 4000
 	clocks = 0
@@ -401,15 +429,15 @@ if __name__ == "__main__":
 		recently_used_memory.print()
 		print()
 		print("CLOCKS:", clocks)
-		PC += 4
 		print("PC:", PC)
 		print("# of concluded instructions:", concluded_instructions)
 		if concluded_instructions != 0:
 			print("CPI:", round(clocks/concluded_instructions, 3))
 		clocks += 1
 
-		if (not instructions_unity.full()) and (len(instructions) > 0):
-			instructions_unity.push(instructions.pop(0))
+		if (not instructions_unity.full()) and (int(PC / 4) < len(instructions)):
+			instructions_unity.push(instructions[int(PC / 4)])
+		PC += 4
 
 		instructions_unity.clock()
 		load_store.clock(register_bank)
@@ -418,11 +446,16 @@ if __name__ == "__main__":
 		add_sub.clock()
 
 
-		print(instructions_unity.name, instructions_unity.top())
-		print(load_store.name, load_store.top())
-		print(mult.name, mult.top())
-		print(div.name, div.top())
-		print(add_sub.name, add_sub.top())
+		# print(instructions_unity.name, instructions_unity.top())
+		# print(load_store.name, load_store.top())
+		# print(mult.name, mult.top())
+		# print(div.name, div.top())
+		# print(add_sub.name, add_sub.top())
+		instructions_unity.print()
+		load_store.print()
+		mult.print()
+		# div.print()
+		add_sub.print()
 		register_bank.print()
 
 		press_enter = input()
