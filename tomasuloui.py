@@ -17,16 +17,14 @@ class Ui_MainWindow(object):
 
 	def setupUi(self, MainWindow):
 		MainWindow.setObjectName("MainWindow")
-		MainWindow.resize(1500, 600)
+		MainWindow.resize(839, 601)
 		self.centralwidget = QtWidgets.QWidget(MainWindow)
 		self.centralwidget.setObjectName("centralwidget")
-		self.horizontalLayoutWidget = QtWidgets.QWidget(self.centralwidget)
-		self.horizontalLayoutWidget.setGeometry(QtCore.QRect(20, 20, 1500, 511))
-		self.horizontalLayoutWidget.setObjectName("horizontalLayoutWidget")
-		self.horizontalLayout = QtWidgets.QHBoxLayout(self.horizontalLayoutWidget)
-		self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
+		self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
+		self.gridLayout.setObjectName("gridLayout")
+		self.horizontalLayout = QtWidgets.QHBoxLayout()
 		self.horizontalLayout.setObjectName("horizontalLayout")
-		self.estacoesTable = QtWidgets.QTableWidget(self.horizontalLayoutWidget)
+		self.estacoesTable = QtWidgets.QTableWidget(self.centralwidget)
 		self.estacoesTable.setRowCount(11)
 		self.estacoesTable.setColumnCount(9)
 		self.estacoesTable.setObjectName("estacoesTable")
@@ -97,17 +95,17 @@ class Ui_MainWindow(object):
 		self.verticalLayout.setObjectName("verticalLayout")
 		self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
 		self.horizontalLayout_2.setObjectName("horizontalLayout_2")
-		self.playBtn = QtWidgets.QPushButton(self.horizontalLayoutWidget)
+		self.playBtn = QtWidgets.QPushButton(self.centralwidget)
 		self.playBtn.setObjectName("playBtn")
 		self.horizontalLayout_2.addWidget(self.playBtn)
-		self.speedUpBtn = QtWidgets.QPushButton(self.horizontalLayoutWidget)
+		self.speedUpBtn = QtWidgets.QPushButton(self.centralwidget)
 		self.speedUpBtn.setObjectName("speedUpBtn")
 		self.horizontalLayout_2.addWidget(self.speedUpBtn)
-		self.pauseBtn = QtWidgets.QPushButton(self.horizontalLayoutWidget)
+		self.pauseBtn = QtWidgets.QPushButton(self.centralwidget)
 		self.pauseBtn.setObjectName("pauseBtn")
 		self.horizontalLayout_2.addWidget(self.pauseBtn)
 		self.verticalLayout.addLayout(self.horizontalLayout_2)
-		self.memoryTable = QtWidgets.QTableWidget(self.horizontalLayoutWidget)
+		self.memoryTable = QtWidgets.QTableWidget(self.centralwidget)
 		self.memoryTable.setObjectName("memoryTable")
 		self.memoryTable.setColumnCount(2)
 		self.memoryTable.setRowCount(4)
@@ -124,7 +122,7 @@ class Ui_MainWindow(object):
 		item = QtWidgets.QTableWidgetItem()
 		self.memoryTable.setHorizontalHeaderItem(1, item)
 		self.verticalLayout.addWidget(self.memoryTable)
-		self.clockTable = QtWidgets.QTableWidget(self.horizontalLayoutWidget)
+		self.clockTable = QtWidgets.QTableWidget(self.centralwidget)
 		self.clockTable.setObjectName("clockTable")
 		self.clockTable.setColumnCount(1)
 		self.clockTable.setRowCount(4)
@@ -139,7 +137,7 @@ class Ui_MainWindow(object):
 		item = QtWidgets.QTableWidgetItem()
 		self.clockTable.setHorizontalHeaderItem(0, item)
 		self.verticalLayout.addWidget(self.clockTable)
-		self.registersTable = QtWidgets.QTableWidget(self.horizontalLayoutWidget)
+		self.registersTable = QtWidgets.QTableWidget(self.centralwidget)
 		self.registersTable.setObjectName("registersTable")
 		self.registersTable.setColumnCount(2)
 		self.registersTable.setRowCount(32)
@@ -213,15 +211,15 @@ class Ui_MainWindow(object):
 		self.registersTable.setHorizontalHeaderItem(1, item)
 		self.verticalLayout.addWidget(self.registersTable)
 		self.horizontalLayout.addLayout(self.verticalLayout)
+		self.gridLayout.addLayout(self.horizontalLayout, 0, 0, 1, 1)
 		MainWindow.setCentralWidget(self.centralwidget)
 		self.menubar = QtWidgets.QMenuBar(MainWindow)
-		self.menubar.setGeometry(QtCore.QRect(0, 0, 833, 25))
+		self.menubar.setGeometry(QtCore.QRect(0, 0, 839, 25))
 		self.menubar.setObjectName("menubar")
 		MainWindow.setMenuBar(self.menubar)
 		self.statusbar = QtWidgets.QStatusBar(MainWindow)
 		self.statusbar.setObjectName("statusbar")
 		MainWindow.setStatusBar(self.statusbar)
-
 
 		self.btn_grp_play = QtWidgets.QButtonGroup()
 		self.btn_grp_play.setExclusive(True)
@@ -457,7 +455,7 @@ class Ui_MainWindow(object):
 				instruction = station.list[i][0]
 			list = [str(station.busy[i]),
 				instruction,
-				"",
+				station.state[i],
 				str(station.Vj[i]),
 				str(station.Vk[i]),
 				station.Qj[i],
@@ -483,8 +481,8 @@ class Ui_MainWindow(object):
 		self.pause = False
 
 		while not self.pause:
-			self.Tomasulo.play()
 			self.Tomasulo.MainWindow.show()
+			if not self.Tomasulo.play(): break
 
 	def on_click_pause(self, pauseBtn):
 		self.pause = True

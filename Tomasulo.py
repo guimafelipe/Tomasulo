@@ -31,6 +31,8 @@ class data_bus:
 		self.receivers = []
 		self.name = name
 		self.queue = []
+		self.sending = False
+		self.i = 0
 
 	def print(self):
 		print(self.queue)
@@ -51,38 +53,49 @@ class data_bus:
 		return flag == 1
 
 	def clock(self):
-		for i in range(len(self.queue)):
+		if not self.sending:
+			self.sending = True
+			self.i = 0
+
+		# for i in range(len(self.queue)):
+		i = self.i
+		if i < len(self.queue):
 			info = self.queue[i]
-
-			if not info: continue
-			for i in range(len(self.receivers)):
-				if len(info[-1]) == 0:
-					if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
-						or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
-						or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
-						or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
-						or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
-						or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
-						or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
-						or (self.receivers[i].name == "register_bank"):
+			
+			if info:
+				for i in range(len(self.receivers)):
+					if len(info[-1]) == 0:
+						if (self.receivers[i].name == "mult" and info and info[0] == "MUL") \
+							or (self.receivers[i].name == "div" and info and info[0] == "DIV") \
+							or (self.receivers[i].name == "add_sub" and info and info[0] == "ADD") \
+							or (self.receivers[i].name == "add_sub" and info and info[0] == "ADDI") \
+							or (self.receivers[i].name == "add_sub" and info and info[0] == "SUB") \
+							or (self.receivers[i].name == "load_store" and info and info[0] == "LW") \
+							or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
+							or (self.receivers[i].name == "register_bank"):
+							self.receivers[i].push(info)
+					elif self.receivers[i].name == "register_bank":
 						self.receivers[i].push(info)
-				elif self.receivers[i].name == "register_bank":
-					self.receivers[i].push(info)
-				elif isinstance(self.receivers[i], buffer):
-					for pos in range(self.receivers[i].max_size):
-						if self.receivers[i].Qj[pos] == info[0]:
-							self.receivers[i].Qj[pos] = ""
-							self.receivers[i].Vj[pos] = info[-1]
-							if self.receivers[i].list[pos][0] == "SW":
-								self.receivers[i].list[pos][1] = info[-1]
-							else:
-								self.receivers[i].list[pos][2] = info[-1]
-						if self.receivers[i].Qk[pos] == info[0]:
-							self.receivers[i].Qk[pos] = ""
-							self.receivers[i].Vk[pos] = info[-1]
-							self.receivers[i].list[pos][3] = info[-1]
+					elif isinstance(self.receivers[i], buffer):
+						for pos in range(self.receivers[i].max_size):
+							if self.receivers[i].Qj[pos] == info[0]:
+								self.receivers[i].Qj[pos] = ""
+								self.receivers[i].Vj[pos] = info[-1]
+								if self.receivers[i].list[pos][0] == "SW":
+									self.receivers[i].list[pos][1] = info[-1]
+								else:
+									self.receivers[i].list[pos][2] = info[-1]
+							if self.receivers[i].Qk[pos] == info[0]:
+								self.receivers[i].Qk[pos] = ""
+								self.receivers[i].Vk[pos] = info[-1]
+								self.receivers[i].list[pos][3] = info[-1]
 
-		self.queue.clear()
+				self.i += 1
+
+		else:
+			self.sending = False
+			self.queue.clear()
+			self.i = 0
 
 
 class executer:
@@ -207,7 +220,10 @@ class adder(executer):
 		super().__init__(list_data_bus)
 
 	def get_result(self, register_bank):
-		return int(self.instruction[2]) + int(self.instruction[3])
+		if self.instruction[0] == "ADD" or self.instruction[0] == "ADDI":
+			return int(self.instruction[2]) + int(self.instruction[3])
+		elif self.instruction[0] == "SUB":
+			return int(self.instruction[2]) - int(self.instruction[3])
 
 	def execute(self, instruction, ID):
 		self.instruction = instruction
@@ -231,7 +247,9 @@ class multiplier(executer):
 
 class buffer:
 	def __init__(self, name, max_size, list_data_bus):
+		self.busy = [False] * max_size
 		self.list = [[]] * max_size
+		self.state = [""] * max_size
 		self.Qj = [""] * max_size
 		self.Qk = [""] * max_size
 		self.Vj = [""] * max_size
@@ -250,6 +268,8 @@ class buffer:
 		if not self.full():
 			while len(self.list[self.end]) > 0: self.end = (self.end + 1) % self.max_size
 			self.list[self.end] = obj
+			if self.name != "instructions_unity":
+				self.state[self.end] = "issued"
 			
 			if str.isnumeric(obj[3]): self.Vk[self.end] = obj[3]
 			else: self.Qk[self.end] = obj[3]
@@ -270,11 +290,13 @@ class buffer:
 	def pop(self):
 		if self.size > 0:
 			ans = copy_list(self.list[self.start])
+			self.busy[self.start] = False
 			self.list[self.start].clear()
 			self.Qj[self.start] = ""
 			self.Qk[self.start] = ""
 			self.Vj[self.start] = ""
 			self.Vk[self.start] = ""
+			self.state[self.start] = ""
 			self.start = (self.start + 1) % self.max_size
 			self.size -= 1
 			return ans
@@ -295,7 +317,7 @@ class buffer:
 
 	def print(self):
 		for i in range(self.max_size):
-			print(self.ID[i], self.name, self.list[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.size)
+			print(self.ID[i], self.name, self.list[i], self.state[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.size)
 
 	def all_data_bus_available(self):
 		flag = 1
@@ -309,16 +331,16 @@ class reservation_station(buffer):
 	def __init__(self, name, max_size, list_data_bus, executer):
 		super().__init__(name, max_size, list_data_bus)
 		self.executer = executer
-		self.busy = [False] * max_size
 		self.marked = 0
 
 	def print(self):
 		for i in range(self.max_size):
-			print(self.ID[i], self.name, self.busy[i], self.list[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.executer.cycles, self.size)
+			print(self.ID[i], self.name, self.busy[i], self.list[i], self.state[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.executer.cycles, self.size)
 
 	def clock(self, register_bank):
 		if not self.executer.busy() and self.busy[self.start] == 1:
 			self.busy[self.start] = False
+			self.state[self.start] = ""
 			self.size -= 1
 			# self.pop()
 
@@ -326,6 +348,7 @@ class reservation_station(buffer):
 			if len(self.Qj[self.start]) == 0 and len(self.Qk[self.start]) == 0:
 				self.executer.execute(self.top(), self.ID[self.start])
 				self.busy[self.start] = True
+				self.state[self.start] = "Executing"
 
 		self.executer.clock(register_bank)
 
@@ -348,7 +371,7 @@ class instructions_unity(buffer):
 
 		instruction[-1] = "mark"
 
-		if instruction[0] == "ADD" or instruction[0] == "ADDI":
+		if instruction[0] == "ADD" or instruction[0] == "ADDI" or instruction[0] == "SUB":
 			instruction[0] = add_sub.ID[add_sub.end]
 
 		elif instruction[0] == "MUL":
@@ -391,14 +414,14 @@ class instructions_unity(buffer):
 							# PC = labels[self.top()[3]]
 					self.pop()
 
-			elif self.top() and (self.top()[0] == "ADD" or self.top()[0] == "ADDI" or self.top()[0] == "MUL"):
+			elif self.top() and (self.top()[0] == "ADD" or self.top()[0] == "ADDI" or self.top()[0] == "SUB" or self.top()[0] == "MUL"):
 				if len(register_bank.registers[int(self.top()[2])].Qi) == 0:
 					self.Vj[self.start] = int(register_bank.registers[int(self.top()[2])].Vi)
 					self.Qj[self.start] = ""
 				elif len(self.Qj[self.start]) == 0 and register_bank.registers[int(self.top()[2])].Qi != self.top()[0]:
 					self.Qj[self.start] = register_bank.registers[int(self.top()[2])].Qi
 
-				if self.top()[0] == "ADD" or self.top()[0] == "MUL" or self.top()[0] == "LW" or self.top()[0] == "SW":
+				if self.top()[0] == "ADD" or self.top()[0] == "SUB" or self.top()[0] == "MUL" or self.top()[0] == "LW" or self.top()[0] == "SW":
 					if len(register_bank.registers[int(self.top()[3])].Qi) == 0:
 						self.Vk[self.start] = int(register_bank.registers[int(self.top()[3])].Vi)
 						self.Qk[self.start] = ""
@@ -445,23 +468,26 @@ class instructions_unity(buffer):
 					self.list_data_bus[i].send(info)
 				if self.top()[0] == "LW":
 					self.issue(Tomasulo.register_bank, Tomasulo.add_sub, Tomasulo.mult, Tomasulo.load_store)
-				self.pop()				
+				self.pop()
+
+			elif self.top() and self.top()[0] == "NOP":
+				self.pop()
 
 
 class load_store(buffer):
 	def __init__(self, name, max_size, list_data_bus, executer):
 		super().__init__(name, max_size, list_data_bus)
 		self.executer = executer
-		self.busy = [False] * max_size
 		self.marked = 0
 
 	def print(self):
 		for i in range(self.max_size):
-			print(self.ID[i], self.name, self.busy[i], self.list[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.executer.cycles, self.size)
+			print(self.ID[i], self.name, self.busy[i], self.list[i], self.state[i], self.Vj[i], self.Vk[i], self.Qj[i], self.Qk[i], self.executer.cycles, self.size)
 
 	def clock(self, register_bank):
 		if not self.executer.busy() and self.busy[self.start] == 1:
 			self.busy[self.start] = False
+			self.state[self.start] = ""
 			self.size -= 1
 			# self.pop()
 
@@ -469,6 +495,7 @@ class load_store(buffer):
 			if len(self.Qj[self.start]) == 0 and len(self.Qk[self.start]) == 0:
 				self.executer.execute(self.top(), self.ID[self.start])
 				self.busy[self.start] = True
+				self.state[self.start] = "Executing"
 
 		self.executer.clock(register_bank)
 
@@ -652,7 +679,7 @@ class Tomasulo:
 		self.PC = 0
 		self.concluded_instructions = 0
 		self.recently_used_memory = recently_used_memory()
-	
+		
 	def play(self):
 		print("RUM:")
 		self.recently_used_memory.print()
@@ -675,8 +702,9 @@ class Tomasulo:
 				self.instructions_unity.push(copy_list(self.instructions[int(self.PC / 4)]))
 				self.PC += 4
 
-		self.common_data_bus.print()
+		# self.common_data_bus.print()
 
+		print()
 		self.instructions_unity.print()
 		self.load_store.print()
 		self.mult.print()
@@ -708,6 +736,36 @@ class Tomasulo:
 
 		self.ui.update_Stations_Table(self.mult, pos)
 		pos += self.mult.max_size
+
+
+		return self.is_active()
+	
+	def is_active(self):
+		if (self.PC / 4) >= len(self.instructions):
+			active = False
+
+			for i in range(self.instructions_unity.max_size):
+				# print(self.instructions_unity.list[i])
+				if self.instructions_unity.list[i] or self.instructions_unity.busy[i] or self.instructions_unity.state[i] == "Executing":
+					active = True
+			for i in range(self.load_store.max_size):
+				# print(self.load_store.list[i])
+				if self.load_store.size > 0 or self.load_store.executer.busy():
+					active = True
+			for i in range(self.mult.max_size):
+				# print(self.mult.list[i])
+				if self.mult.size > 0 or self.mult.executer.busy():
+					active = True
+			for i in range(self.add_sub.max_size):
+				# print(self.add_sub.list[i])
+				# if self.add_sub.list[i] or self.add_sub.busy[i] or self.add_sub.state[i] == "Executing":
+				if self.add_sub.size > 0 or self.add_sub.executer.busy():
+					active = True
+
+			if not active: return False
+
+
+		return True
 
 
 
