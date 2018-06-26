@@ -384,6 +384,10 @@ class instructions_unity(buffer):
 
 	def clock(self, register_bank):
 		if not self.empty() and self.all_data_bus_available():
+			if self.top() and self.top()[0] == "JMP":
+				Tomasulo.PC = int(self.top()[3])
+				self.pop()
+				
 			if self.top() and ((self.top()[0] == "BEQ") or (self.top()[0] == "BNE") or (self.top()[0] == "BLE")):
 				if len(register_bank.registers[int(self.top()[1])].Qi) == 0:
 					self.Vj[self.start] = register_bank.registers[int(self.top()[1])].Vi
