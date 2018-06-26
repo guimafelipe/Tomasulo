@@ -2,7 +2,7 @@ import threading
 import sys
 import time
 import queue
-import tomasuloui
+import tomasuloui_v2
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 
@@ -74,7 +74,7 @@ class data_bus:
 							or (self.receivers[i].name == "load_store" and info and info[0] == "SW") \
 							or (self.receivers[i].name == "register_bank"):
 							self.receivers[i].push(info)
-					elif self.receivers[i].name == "register_bank":
+					elif self.receivers[i].name == "register_bank" or self.receivers[i].name == "reorder_buffer":
 						self.receivers[i].push(info)
 					elif isinstance(self.receivers[i], buffer):
 						for pos in range(self.receivers[i].max_size):
@@ -129,21 +129,6 @@ class executer:
 			ans = copy_list(self.instruction)
 			self.instruction.clear()
 			return ans
-
-	def mark_destiny(self, source=None, destiny=None):
-		if not self.instruction:
-			instruction = []
-			instruction.append(source)
-			instruction.append(destiny)
-			instruction.append("")
-			instruction.append("")
-			instruction.append("")
-
-		else: instruction = copy_list(self.instruction)
-
-		instruction[-1] = "mark"
-		for i in range(len(self.list_data_bus)):
-			self.list_data_bus[i].send(instruction)
 
 	def all_data_bus_available(self):
 		flag = 1
@@ -274,15 +259,12 @@ class buffer:
 			if str.isnumeric(obj[3]): self.Vk[self.end] = obj[3]
 			else: self.Qk[self.end] = obj[3]
 
-			if obj[1] == "SW" or obj[1] == "LW":
+			if obj[0] == "SW" or obj[1] == "LW":
 				if str.isnumeric(obj[1]): self.Vj[self.end] = obj[1]
 				else: self.Qj[self.end] = obj[1]
 			else:
 				if str.isnumeric(obj[2]): self.Vj[self.end] = obj[2]
 				else: self.Qj[self.end] = obj[2]
-			
-			# if str.isnumeric(obj[2]): self.Vj[self.end] = obj[2]
-			# else: self.Qj[self.end] = obj[2]
 			
 			self.end = (self.end + 1) % self.max_size
 			self.size += 1
@@ -345,6 +327,8 @@ class reservation_station(buffer):
 			# self.pop()
 
 		if not self.executer.busy() and self.top():
+			# if self.instruction[0] == "SW":
+
 			if len(self.Qj[self.start]) == 0 and len(self.Qk[self.start]) == 0:
 				self.executer.execute(self.top(), self.ID[self.start])
 				self.busy[self.start] = True
@@ -380,38 +364,77 @@ class instructions_unity(buffer):
 		elif instruction[0] == "SW" or instruction[0] == "LW":
 			instruction[0] = load_store.ID[load_store.end]
 
+		if instruction[0] != "SW":
+			Tomasulo.ROB.RS_Busy[int(instruction[1])] = True
+			Tomasulo.ROB.RS_reorder[int(instruction[1])] = str(Tomasulo.ROB.end)
+
 		register_bank.push(instruction)
 
 	def clock(self, register_bank):
 		if not self.empty() and self.all_data_bus_available():
+			if self.top() and self.top()[0] == "JMP":
+				Tomasulo.PC = int(self.top()[3])
+				self.pop()
+
+			# if self.top() and ((self.top()[0] == "BEQ") or (self.top()[0] == "BNE") or (self.top()[0] == "BLE")):
+			# 	if len(register_bank.registers[int(self.top()[1])].Qi) == 0:
+			# 		self.Vj[self.start] = register_bank.registers[int(self.top()[1])].Vi
+			# 		self.Qj[self.start] = ""
+			# 	else:
+			# 		self.Qj[self.start] = register_bank.registers[int(self.top()[1])].Qi
+
+			# 	if len(register_bank.registers[int(self.top()[2])].Qi) == 0:
+			# 		self.Vk[self.start] = register_bank.registers[int(self.top()[2])].Vi
+			# 		self.Qk[self.start] = ""
+			# 	else:
+			# 		self.Qk[self.start] = register_bank.registers[int(self.top()[2])].Qi
+
+			# 	if len(self.Qj[self.start]) == 0 and len(self.Qk[self.start]) == 0:
+			# 		global labels
+			# 		if self.top()[0] == "BEQ":
+			# 			if self.Vj[self.start] == self.Vk[self.start]:
+			# 				Tomasulo.PC += int(self.top()[3])
+			# 				# PC = labels[self.top()[3]]
+			# 		if self.top()[0] == "BNE":
+			# 			if self.Vj[self.start] != self.Vk[self.start]:
+			# 				Tomasulo.PC += int(self.top()[3])
+			# 				# PC = labels[self.top()[3]]
+			# 		if self.top()[0] == "BLE":
+			# 			if int(self.Vj[self.start]) <= int(self.Vk[self.start]):
+			# 				Tomasulo.PC = int(self.top()[3])
+			# 				# PC = labels[self.top()[3]]
+			# 		self.pop()
+
 			if self.top() and ((self.top()[0] == "BEQ") or (self.top()[0] == "BNE") or (self.top()[0] == "BLE")):
 				if len(register_bank.registers[int(self.top()[1])].Qi) == 0:
-					self.Vj[self.start] = register_bank.registers[int(self.top()[1])].Vi
-					self.Qj[self.start] = ""
+					self.top()[1] = str(register_bank.registers[int(self.top()[1])].Vi)
 				else:
-					self.Qj[self.start] = register_bank.registers[int(self.top()[1])].Qi
+					self.top()[1] = register_bank.registers[int(self.top()[1])].Qi
 
 				if len(register_bank.registers[int(self.top()[2])].Qi) == 0:
-					self.Vk[self.start] = register_bank.registers[int(self.top()[2])].Vi
-					self.Qk[self.start] = ""
+					self.top()[2] = str(register_bank.registers[int(self.top()[2])].Vi)
 				else:
-					self.Qk[self.start] = register_bank.registers[int(self.top()[2])].Qi
+					self.top()[2] = register_bank.registers[int(self.top()[2])].Qi
 
-				if len(self.Qj[self.start]) == 0 and len(self.Qk[self.start]) == 0:
-					# global PC
-					global labels
+				if str.isnumeric(self.top()[1]) and str.isnumeric(self.top()[2]):
+					# global labels
 					if self.top()[0] == "BEQ":
-						if self.Vj[self.start] == self.Vk[self.start]:
+						if self.top()[1] == self.Vtop()[2]:
 							Tomasulo.PC += int(self.top()[3])
 							# PC = labels[self.top()[3]]
 					if self.top()[0] == "BNE":
-						if self.Vj[self.start] != self.Vk[self.start]:
+						if self.top()[1] != self.top()[2]:
 							Tomasulo.PC += int(self.top()[3])
 							# PC = labels[self.top()[3]]
 					if self.top()[0] == "BLE":
-						if int(self.Vj[self.start]) <= int(self.Vk[self.start]):
+						if int(self.top()[1]) <= int(self.top()[2]):
 							Tomasulo.PC = int(self.top()[3])
 							# PC = labels[self.top()[3]]
+					self.pop()
+
+				else:
+					info = copy_list(self.top())
+					Tomasulo.ROB.push(info)
 					self.pop()
 
 			elif self.top() and (self.top()[0] == "ADD" or self.top()[0] == "ADDI" or self.top()[0] == "SUB" or self.top()[0] == "MUL"):
@@ -610,7 +633,7 @@ class Tomasulo:
 
 		self.app = QtWidgets.QApplication(sys.argv)
 		self.MainWindow = QtWidgets.QMainWindow()
-		self.ui = tomasuloui.Ui_MainWindow()
+		self.ui = tomasuloui_v2.Ui_MainWindow()
 		self.ui.setupUi(self.MainWindow)
 		self.ui.set_Tomasulo(self)
 		self.MainWindow.show()
@@ -650,11 +673,12 @@ class Tomasulo:
 
 		self.register_bank = register_bank("register_bank")
 		self.ROB_bus = data_bus("ROB_bus")
-		self.ROB = ROB("re-order_buffer", 10, self.ROB_bus)
+		self.ROB = ROB("reorder_buffer", 10, [self.ROB_bus])
 
 
 		self.common_data_bus = data_bus("common_data_bus")
-		self.common_data_bus.add_receivers([self.register_bank, self.ROB])
+		# self.common_data_bus.add_receivers([self.register_bank, self.ROB])
+		self.common_data_bus.add_receivers([self.ROB])
 
 		self.loader = loader([self.common_data_bus])
 		self.load_store = load_store("load_store", 5, [self.common_data_bus], self.loader)
@@ -666,7 +690,7 @@ class Tomasulo:
 		self.add_sub = reservation_station("add_sub", 3, [self.common_data_bus], self.adder)
 
 		self.common_data_bus.add_receivers([self.load_store, self.mult, self.add_sub])
-		self.ROB_bus.add_receivers([self.loader, self.register_bank])
+		self.ROB_bus.add_receivers([self.load_store, self.add_sub, self.mult, self.register_bank])
 
 		self.load_store_bus = data_bus("load_store_bus")
 		self.load_store_bus.add_receivers([self.load_store])
@@ -700,9 +724,13 @@ class Tomasulo:
 			# 	labels[instructions[int(PC / 4)][1]] = PC
 			# else:
 			# 	instructions_unity.push(copy_list(instructions[int(PC / 4)]))
+
 			if self.instructions_unity.empty() or (self.instructions_unity.top()[0] != "BEQ" and self.instructions_unity.top()[0] != "BLE" and self.instructions_unity.top()[0] != "BNE"):
 				self.instructions_unity.push(copy_list(self.instructions[int(self.PC / 4)]))
 				self.PC += 4
+
+			# self.instructions_unity.push(copy_list(self.instructions[int(self.PC / 4)]))
+			# self.PC += 4
 
 		# self.common_data_bus.print()
 
@@ -719,10 +747,13 @@ class Tomasulo:
 		self.load_store.clock(self.register_bank)
 		self.mult.clock(self.register_bank)
 		self.add_sub.clock(self.register_bank)
+		# self.ROB.clock(self.register_bank)
 
 		self.load_store_bus.clock()
 		self.operations_bus.clock()
 		self.common_data_bus.clock()
+		# self.ROB_bus.clock()
+		self.ROB.clock(self.register_bank)
 
 
 		# Updating Graphic Interface:
@@ -741,6 +772,8 @@ class Tomasulo:
 		self.ui.update_Stations_Table(self.mult, pos)
 		pos += self.mult.max_size
 
+		self.ui.update_ROB_Buffer_Table(self.ROB)
+		self.ui.update_ROB_Registers_Table(self.ROB)
 
 		return self.is_active()
 	
@@ -768,14 +801,121 @@ class Tomasulo:
 
 			if not active: return False
 
-
 		return True
 
 
 class ROB(buffer):
 	def __init__(self, name, max_size, list_data_bus):
-		print("****************************************")
 		super().__init__(name, max_size, list_data_bus)
+		self.destiny = [""] * max_size
+		self.value = [""] * max_size
+		self.RS_Busy = ["False"] * 32
+		self.RS_reorder = [""] * 32
+
+	def print(self):
+		for i in range(self.max_size):
+			print(self.ID[i], self.name, self.busy[i], self.list[i], self.state[i], self.destiny[i], self.value[i], self.size, "empty:", self.empty())
+
+	def push(self, info):
+		if not self.full():
+			for i in range(self.max_size):
+				if len(self.list[i]) > 0:
+					for j in range(1, len(self.list[i])):
+						if self.list[i][j] == info[0]:
+							self.list[i][j] = info[-1]
+					# if self.list[i][0] == "BEQ" or self.list[i][0] == "BNE" or self.list[i][0] == "BLE":
+					# 	if self.list[i][1] == info[0]:
+					# 		self.list[i][1] = info[-1]
+					# 	if self.list[i][2] == info[0]:
+					# 		self.list[i][2] = info[-1]
+
+					# elif self.list[i][0] == "SW":
+
+					# if self.receivers[i].Qj[pos] == info[0]:
+					# 	self.receivers[i].Qj[pos] = ""
+					# 	self.receivers[i].Vj[pos] = info[-1]
+					# 	if self.receivers[i].list[pos][0] == "SW":
+					# 		self.receivers[i].list[pos][1] = info[-1]
+					# 	else:
+					# 		self.receivers[i].list[pos][2] = info[-1]
+					# if self.receivers[i].Qk[pos] == info[0]:
+					# 	self.receivers[i].Qk[pos] = ""
+					# 	self.receivers[i].Vk[pos] = info[-1]
+					# 	self.receivers[i].list[pos][3] = info[-1]
+
+
+			while len(self.list[self.end]) > 0: self.end = (self.end + 1) % self.max_size
+			self.list[self.end] = info
+
+			if not self.empty() and (self.top()[0] == "BEQ" or self.top()[0] == "BNE" or self.top()[0] == "BLE"):
+				self.state[self.end] = "Writing"
+			else:
+				self.state[self.end] = "Consolidating"
+
+			if len(info) > 0:
+				self.destiny[self.end] = info[1]
+				self.value[self.end] = info[-1]
+			
+			self.end = (self.end + 1) % self.max_size
+			self.size += 1
+
+	def pop(self):
+		if self.size > 0:
+			ans = copy_list(self.list[self.start])
+			self.busy[self.start] = False
+			self.list[self.start].clear()
+			self.state[self.start] = ""
+			self.destiny[self.start] = ""
+			self.value[self.start] = ""
+			self.RS_Busy[self.start] = False
+			self.RS_reorder[self.start] = ""
+			self.start = (self.start + 1) % self.max_size
+			self.size -= 1
+			return ans
+
+	def clock(self, register_bank):
+		if self.top() and ((self.top()[0] == "BEQ") or (self.top()[0] == "BNE") or (self.top()[0] == "BLE")):
+			print("#####################################################")
+
+			if str.isnumeric(self.top()[1]) and str.isnumeric(self.top()[2]):
+				global labels
+				if self.top()[0] == "BEQ":
+					if self.top()[1] == self.top()[2]:
+						Tomasulo.PC += int(self.top()[3])
+						# PC = labels[self.top()[3]]
+				if self.top()[0] == "BNE":
+					if self.top()[1] != self.top()[2]:
+						Tomasulo.PC += int(self.top()[3])
+						# PC = labels[self.top()[3]]
+				if self.top()[0] == "BLE":
+					if self.top()[1] <= self.top()[2]:
+						Tomasulo.PC = int(self.top()[3])
+						# PC = labels[self.top()[3]]
+				self.pop()
+
+		else:
+			if not self.empty():
+				instruction = copy_list(self.list[self.start])
+
+				if instruction[0] == "SW":
+					pass
+
+				else:
+					register_bank.registers[int(self.destiny[self.start])].Vi = self.value[self.start]
+					register_bank.registers[int(self.destiny[self.start])].Qi = ""
+					self.pop()
+
+					# global concluded_instructions
+					Tomasulo.concluded_instructions += 1
+
+				# register_bank.push(instruction)
+				# for i in range(len(self.list_data_bus)):
+				# 	self.list_data_bus[i].send(instruction)
+
+				# self.pop()
+
+				# global concluded_instructions
+				# Tomasulo.concluded_instructions += 1
 
 
 
